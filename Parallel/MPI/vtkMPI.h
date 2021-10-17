@@ -30,7 +30,7 @@
 class VTKPARALLELMPI_EXPORT vtkMPICommunicatorOpaqueComm
 {
 public:
-  vtkMPICommunicatorOpaqueComm(MPI_Comm* handle = 0);
+  vtkMPICommunicatorOpaqueComm(MPI_Comm* handle = nullptr);
 
   MPI_Comm* GetHandle();
 
@@ -44,7 +44,7 @@ protected:
 class VTKPARALLELMPI_EXPORT vtkMPICommunicatorReceiveDataInfo
 {
 public:
-  vtkMPICommunicatorReceiveDataInfo() { this->Handle = 0; }
+  vtkMPICommunicatorReceiveDataInfo() { this->Handle = nullptr; }
   MPI_Datatype DataType;
   MPI_Status Status;
   MPI_Comm* Handle;

@@ -125,7 +125,7 @@ public:
 
   vtkRTTestSequence(vtkRenderTimings* rt)
   {
-    this->Test = NULL;
+    this->Test = nullptr;
     this->TargetTime = 10.0;
     this->RenderTimings = rt;
     this->ChartResults = true;
