@@ -5,4 +5,7 @@ set(VTK_MODULE_ENABLE_VTK_fides NO CACHE STRING "")
 # Lowest-common denominator.
 set(VTKm_CUDA_Architecture "pascal" CACHE STRING "")
 
+# OpenXR do not support OSMesa
+set(VTK_MODULE_ENABLE_VTK_RenderingOpenXR NO CACHE STRING "")
+
 include("${CMAKE_CURRENT_LIST_DIR}/configure_fedora34.cmake")

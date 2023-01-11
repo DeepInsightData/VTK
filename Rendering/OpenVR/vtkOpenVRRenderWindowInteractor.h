@@ -54,6 +54,11 @@ public:
   ///@}
 
 protected:
+  /**
+   * Create and set the openvr style on this
+   * Set ActionManifestFileName to vtk_openvr_actions.json
+   * Set ActionSetName to /actions/vtk
+   */
   vtkOpenVRRenderWindowInteractor();
   ~vtkOpenVRRenderWindowInteractor() override = default;
 

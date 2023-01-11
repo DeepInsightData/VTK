@@ -57,7 +57,7 @@ void vtkOpenXRRemotingRenderWindow::SetRemotingIPAddress(const char* host)
 //------------------------------------------------------------------------------
 void vtkOpenXRRemotingRenderWindow::Initialize()
 {
-  if (this->Initialized)
+  if (this->VRInitialized)
   {
     return;
   }

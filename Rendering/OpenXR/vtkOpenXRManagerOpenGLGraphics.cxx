@@ -132,6 +132,7 @@ bool vtkOpenXRManagerOpenGLGraphics::CreateGraphicsBinding(vtkOpenGLRenderWindow
   // That will be in the next chain of the XrSessionCreateInfo
   // We need to fill xDisplay, visualId, glxFBConfig, glxDrawable and glxContext
 
+  // NOLINTBEGIN(modernize-make-shared)
   auto graphicsBindingGLX =
     std::shared_ptr<XrGraphicsBindingOpenGLXlibKHR>(new XrGraphicsBindingOpenGLXlibKHR{
       XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR, // .type
@@ -142,6 +143,7 @@ bool vtkOpenXRManagerOpenGLGraphics::CreateGraphicsBinding(vtkOpenGLRenderWindow
       0,                                        // .glxDrawable. a valid X11 OpenGL GLX GLXDrawable
       0                                         // .glxContext. a valid X11 OpenGL GLX GLXContext
     });
+  // NOLINTEND(modernize-make-shared)
   this->GraphicsBinding = graphicsBindingGLX;
 
   vtkNew<vtkXOpenGLRenderWindow> xoglRenWin;
@@ -164,6 +166,7 @@ bool vtkOpenXRManagerOpenGLGraphics::CreateGraphicsBinding(vtkOpenGLRenderWindow
 
 #elif defined(_WIN32)
   (void)helperWindow; // Hide unused parameter warning
+  // NOLINTBEGIN(modernize-make-shared)
   auto graphicsBindingGLWin32 =
     std::shared_ptr<XrGraphicsBindingOpenGLWin32KHR>(new XrGraphicsBindingOpenGLWin32KHR{
       XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR, // .type
@@ -171,6 +174,7 @@ bool vtkOpenXRManagerOpenGLGraphics::CreateGraphicsBinding(vtkOpenGLRenderWindow
       0,                                         // .hdC : a valid Windows HW device context handle.
       0 // .hGLRChandle : a valid Windows OpenGL rendering context
     });
+  // NOLINTEND(modernize-make-shared)
   this->GraphicsBinding = graphicsBindingGLWin32;
 
   graphicsBindingGLWin32->hDC = wglGetCurrentDC();

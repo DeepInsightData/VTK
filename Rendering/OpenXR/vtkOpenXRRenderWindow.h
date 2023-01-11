@@ -145,6 +145,11 @@ public:
    */
   void UpdateHMDMatrixPose() override;
 
+  /**
+   * Render the controllers
+   */
+  void RenderModels() override;
+
 protected:
   vtkOpenXRRenderWindow();
   ~vtkOpenXRRenderWindow() override;
@@ -156,8 +161,6 @@ protected:
   void RenderFramebuffer(FramebufferDesc& framebufferDesc);
 
   virtual void RenderOneEye(uint32_t eye);
-
-  void RenderModels();
 
   vtkNew<vtkMatrix4x4> TempMatrix4x4;
 
