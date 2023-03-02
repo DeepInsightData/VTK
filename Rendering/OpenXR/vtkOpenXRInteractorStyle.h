@@ -40,7 +40,7 @@ public:
   vtkVRControlsHelper* MakeControlsHelper() override { return nullptr; };
 
   // likely to be removed
-  void LoadNextCameraPose(){};
+  void LoadNextCameraPose() override {}
 
 protected:
   vtkOpenXRInteractorStyle() = default;
