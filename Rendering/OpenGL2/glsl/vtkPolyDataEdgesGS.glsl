@@ -51,7 +51,7 @@ layout(triangles) in;
 layout(triangle_strip, max_vertices = 3) out;
 
 uniform vec4 vpDims;
-out vec4 edgeEqn[3];
+noperspective out vec4 edgeEqn[3];
 uniform float lineWidth;
 
 //VTK::Edges::Dec
@@ -80,20 +80,6 @@ void main()
     edgeEqn[i] = vec4(tmp.x, tmp.y, 0.0, -d);
   }
 
-  vec2 offsets[3];
-
-  offsets[0] = edgeEqn[2].xy + edgeEqn[0].xy;
-  offsets[0] = -0.5*normalize(offsets[0])*lineWidth;
-  offsets[0] /= vpDims.zw;
-
-  offsets[1] = edgeEqn[0].xy + edgeEqn[1].xy;
-  offsets[1] = -0.5*normalize(offsets[1])*lineWidth;
-  offsets[1] /= vpDims.zw;
-
-  offsets[2] = edgeEqn[1].xy + edgeEqn[2].xy;
-  offsets[2] = -0.5*normalize(offsets[2])*lineWidth;
-  offsets[2] /= vpDims.zw;
-
   //VTK::Edges::Impl
 
   for (int i = 0; i < 3; i++)
@@ -120,7 +106,6 @@ void main()
     // gl_Position = gl_in[i].gl_Position;
 
     gl_Position = gl_in[i].gl_Position;
-    gl_Position.xy = gl_Position.xy + offsets[i]*gl_Position.w;
 
     EmitVertex();
     }
