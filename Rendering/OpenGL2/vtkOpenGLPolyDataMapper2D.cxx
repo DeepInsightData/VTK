@@ -32,6 +32,7 @@
 #include "vtkOpenGLShaderCache.h"
 #include "vtkOpenGLShaderProperty.h"
 #include "vtkOpenGLState.h"
+#include "vtkOpenGLUniforms.h"
 #include "vtkOpenGLVertexArrayObject.h"
 #include "vtkOpenGLVertexBufferObjectCache.h"
 #include "vtkOpenGLVertexBufferObjectGroup.h"
@@ -226,6 +227,7 @@ void vtkOpenGLPolyDataMapper2D::ReplaceShaderValues(
 {
   vtkRenderer* ren = vtkRenderer::SafeDownCast(viewport);
 
+  this->ReplaceShaderCustomUniforms(shaders, actor);
   this->ReplaceShaderColor(shaders, ren, actor);
   this->ReplaceShaderTCoord(shaders, ren, actor);
   this->ReplaceShaderPrimID(shaders, ren, actor);
@@ -296,6 +298,8 @@ void vtkOpenGLPolyDataMapper2D::UpdateShaders(
 
   if (cellBO.Program)
   {
+    this->SetCustomUniforms(cellBO, actor);
+    vtkOpenGLCheckErrorMacro("failed after UpdateShader");
     this->SetMapperShaderParameters(cellBO, viewport, actor);
     vtkOpenGLCheckErrorMacro("failed after UpdateShader");
     this->SetPropertyShaderParameters(cellBO, viewport, actor);
@@ -308,6 +312,18 @@ void vtkOpenGLPolyDataMapper2D::UpdateShaders(
   }
 
   vtkOpenGLCheckErrorMacro("failed after UpdateShader");
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLPolyDataMapper2D::SetCustomUniforms(vtkOpenGLHelper& cellBO, vtkActor2D* actor)
+{
+  vtkShaderProperty* sp = actor->GetShaderProperty();
+  auto vu = static_cast<vtkOpenGLUniforms*>(sp->GetVertexCustomUniforms());
+  vu->SetUniforms(cellBO.Program);
+  auto fu = static_cast<vtkOpenGLUniforms*>(sp->GetFragmentCustomUniforms());
+  fu->SetUniforms(cellBO.Program);
+  auto gu = static_cast<vtkOpenGLUniforms*>(sp->GetGeometryCustomUniforms());
+  gu->SetUniforms(cellBO.Program);
 }
 
 //------------------------------------------------------------------------------
@@ -376,6 +392,25 @@ void vtkOpenGLPolyDataMapper2D::SetPropertyShaderParameters(
 
     program->SetUniform4f("diffuseColor", diffuseColor);
   }
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLPolyDataMapper2D::ReplaceShaderCustomUniforms(
+  std::map<vtkShader::Type, vtkShader*> shaders, vtkActor2D* actor)
+{
+  vtkShaderProperty* sp = actor->GetShaderProperty();
+
+  vtkShader* vertexShader = shaders[vtkShader::Vertex];
+  vtkOpenGLUniforms* vu = static_cast<vtkOpenGLUniforms*>(sp->GetVertexCustomUniforms());
+  vtkShaderProgram::Substitute(vertexShader, "//VTK::CustomUniforms::Dec", vu->GetDeclarations());
+
+  vtkShader* fragmentShader = shaders[vtkShader::Fragment];
+  vtkOpenGLUniforms* fu = static_cast<vtkOpenGLUniforms*>(sp->GetFragmentCustomUniforms());
+  vtkShaderProgram::Substitute(fragmentShader, "//VTK::CustomUniforms::Dec", fu->GetDeclarations());
+
+  vtkShader* geometryShader = shaders[vtkShader::Geometry];
+  vtkOpenGLUniforms* gu = static_cast<vtkOpenGLUniforms*>(sp->GetGeometryCustomUniforms());
+  vtkShaderProgram::Substitute(geometryShader, "//VTK::CustomUniforms::Dec", gu->GetDeclarations());
 }
 
 //------------------------------------------------------------------------------

@@ -104,6 +104,11 @@ protected:
   virtual void UpdateShaders(vtkOpenGLHelper& cellBO, vtkViewport* viewport, vtkActor2D* act);
 
   /**
+   * Set the value of user-defined uniform variables, called by UpdateShader
+   */
+  virtual void SetCustomUniforms(vtkOpenGLHelper& cellBO, vtkActor2D* actor);
+
+  /**
    * Set the shader parameters related to the mapper/input data, called by UpdateShader
    */
   virtual void SetMapperShaderParameters(
@@ -123,6 +128,8 @@ protected:
    * Perform string replacements on the shader templates, called from
    * ReplaceShaderValues
    */
+  virtual void ReplaceShaderCustomUniforms(
+    std::map<vtkShader::Type, vtkShader*> shaders, vtkActor2D* act);
   virtual void ReplaceShaderColor(
     std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor2D* act);
   virtual void ReplaceShaderTCoord(
