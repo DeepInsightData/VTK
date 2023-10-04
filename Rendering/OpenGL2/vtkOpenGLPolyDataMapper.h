@@ -173,7 +173,7 @@ public:
    * instead of using the one defined by the property. Note that this flag is
    * not available on OpenGLES as the feature is enabled by default. With
    * OpenGL, the feature is turned off by default.
-   * Warning: on MacOS, enabling the feature result in non point drawing
+   * Warning: on MacOS, enabling the feature results in non point drawing
    * if the shaders do not set the point size.
    */
   vtkGetMacro(UseProgramPointSize, bool);
@@ -259,7 +259,7 @@ protected:
 
   /**
    * Make sure appropriate shaders are defined, compiled and bound.  This method
-   * orchistrates the process, much of the work is done in other methods
+   * orchestrates the process, much of the work is done in other methods
    */
   virtual void UpdateShaders(vtkOpenGLHelper& cellBO, vtkRenderer* ren, vtkActor* act);
 
