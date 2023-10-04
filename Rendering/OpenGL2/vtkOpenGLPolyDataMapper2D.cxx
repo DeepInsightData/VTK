@@ -20,20 +20,18 @@
 #include "vtkCellArray.h"
 #include "vtkHardwareSelector.h"
 #include "vtkInformation.h"
-#include "vtkMath.h"
 #include "vtkMatrix4x4.h"
 #include "vtkObjectFactory.h"
 #include "vtkOpenGLBufferObject.h"
 #include "vtkOpenGLCellToVTKCellMap.h"
 #include "vtkOpenGLError.h"
 #include "vtkOpenGLIndexBufferObject.h"
-#include "vtkOpenGLPolyDataMapper.h"
 #include "vtkOpenGLRenderWindow.h"
 #include "vtkOpenGLRenderer.h"
 #include "vtkOpenGLResourceFreeCallback.h"
 #include "vtkOpenGLShaderCache.h"
+#include "vtkOpenGLShaderProperty.h"
 #include "vtkOpenGLState.h"
-#include "vtkOpenGLTexture.h"
 #include "vtkOpenGLVertexArrayObject.h"
 #include "vtkOpenGLVertexBufferObjectCache.h"
 #include "vtkOpenGLVertexBufferObjectGroup.h"
@@ -137,6 +135,7 @@ bool vtkOpenGLPolyDataMapper2D::GetNeedToRebuildShaders(
   // light complexity changed
   if (cellBO.Program == nullptr || cellBO.ShaderSourceTime < this->GetMTime() ||
     cellBO.ShaderSourceTime < actor->GetMTime() ||
+    cellBO.ShaderSourceTime < actor->GetShaderProperty()->GetMTime() ||
     cellBO.ShaderSourceTime < this->GetInput()->GetMTime() ||
     cellBO.ShaderSourceTime < this->PickStateChanged)
   {
@@ -147,99 +146,94 @@ bool vtkOpenGLPolyDataMapper2D::GetNeedToRebuildShaders(
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLPolyDataMapper2D::BuildShaders(std::string& VSSource, std::string& FSSource,
-  std::string& GSSource, vtkViewport* viewport, vtkActor2D* actor)
+void vtkOpenGLPolyDataMapper2D::BuildShaders(
+  std::map<vtkShader::Type, vtkShader*> shaders, vtkViewport* viewport, vtkActor2D* actor)
 {
-  VSSource = vtkPolyData2DVS;
-  FSSource = vtkPolyData2DFS;
-  if (this->HaveWideLines(viewport, actor))
+  this->GetShaderTemplate(shaders, viewport, actor);
+
+  // user specified pre replacements
+  vtkOpenGLShaderProperty* sp = vtkOpenGLShaderProperty::SafeDownCast(actor->GetShaderProperty());
+  vtkOpenGLShaderProperty::ReplacementMap repMap = sp->GetAllShaderReplacements();
+  for (const auto& i : repMap)
   {
-    GSSource = vtkPolyDataWideLineGS;
+    if (i.first.ReplaceFirst)
+    {
+      std::string ssrc = shaders[i.first.ShaderType]->GetSource();
+      vtkShaderProgram::Substitute(
+        ssrc, i.first.OriginalValue, i.second.Replacement, i.second.ReplaceAll);
+      shaders[i.first.ShaderType]->SetSource(ssrc);
+    }
+  }
+
+  this->ReplaceShaderValues(shaders, viewport, actor);
+
+  // user specified post replacements
+  for (const auto& i : repMap)
+  {
+    if (!i.first.ReplaceFirst)
+    {
+      std::string ssrc = shaders[i.first.ShaderType]->GetSource();
+      vtkShaderProgram::Substitute(
+        ssrc, i.first.OriginalValue, i.second.Replacement, i.second.ReplaceAll);
+      shaders[i.first.ShaderType]->SetSource(ssrc);
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLPolyDataMapper2D::GetShaderTemplate(
+  std::map<vtkShader::Type, vtkShader*> shaders, vtkViewport* viewport, vtkActor2D* actor)
+{
+  vtkShaderProperty* sp = actor->GetShaderProperty();
+  if (sp->HasVertexShaderCode())
+  {
+    shaders[vtkShader::Vertex]->SetSource(sp->GetVertexShaderCode());
   }
   else
   {
-    GSSource.clear();
+    shaders[vtkShader::Vertex]->SetSource(vtkPolyData2DVS);
   }
 
-  // Build our shader if necessary.
-  if (this->HaveCellScalars)
+  if (sp->HasFragmentShaderCode())
   {
-    vtkShaderProgram::Substitute(FSSource, "//VTK::Color::Dec", "uniform samplerBuffer textureC;");
-    vtkShaderProgram::Substitute(FSSource, "//VTK::Color::Impl",
-      "gl_FragData[0] = texelFetchBuffer(textureC, gl_PrimitiveID + PrimitiveIDOffset);");
+    shaders[vtkShader::Fragment]->SetSource(sp->GetFragmentShaderCode());
   }
   else
   {
-    if (this->Colors && this->Colors->GetNumberOfComponents())
+    shaders[vtkShader::Fragment]->SetSource(vtkPolyData2DFS);
+  }
+
+  if (sp->HasGeometryShaderCode())
+  {
+    shaders[vtkShader::Geometry]->SetSource(sp->GetGeometryShaderCode());
+  }
+  else
+  {
+    if (this->HaveWideLines(viewport, actor))
     {
-      vtkShaderProgram::Substitute(VSSource, "//VTK::Color::Dec",
-        "in vec4 diffuseColor;\n"
-        "out vec4 fcolorVSOutput;");
-      vtkShaderProgram::Substitute(
-        VSSource, "//VTK::Color::Impl", "fcolorVSOutput = diffuseColor;");
-      vtkShaderProgram::Substitute(GSSource, "//VTK::Color::Dec",
-        "in vec4 fcolorVSOutput[];\n"
-        "out vec4 fcolorGSOutput;");
-      vtkShaderProgram::Substitute(
-        GSSource, "//VTK::Color::Impl", "fcolorGSOutput = fcolorVSOutput[i];");
-      vtkShaderProgram::Substitute(FSSource, "//VTK::Color::Dec", "in vec4 fcolorVSOutput;");
-      vtkShaderProgram::Substitute(
-        FSSource, "//VTK::Color::Impl", "gl_FragData[0] = fcolorVSOutput;");
+      shaders[vtkShader::Geometry]->SetSource(vtkPolyDataWideLineGS);
     }
     else
     {
-      vtkShaderProgram::Substitute(FSSource, "//VTK::Color::Dec", "uniform vec4 diffuseColor;");
-      vtkShaderProgram::Substitute(
-        FSSource, "//VTK::Color::Impl", "gl_FragData[0] = diffuseColor;");
+      shaders[vtkShader::Geometry]->SetSource("");
     }
   }
+}
 
-  int numTCoordComps = this->VBOs->GetNumberOfComponents("tcoordMC");
-  if (numTCoordComps == 1 || numTCoordComps == 2)
-  {
-    if (numTCoordComps == 1)
-    {
-      vtkShaderProgram::Substitute(
-        VSSource, "//VTK::TCoord::Dec", "in float tcoordMC; out float tcoordVCVSOutput;");
-      vtkShaderProgram::Substitute(VSSource, "//VTK::TCoord::Impl", "tcoordVCVSOutput = tcoordMC;");
-      vtkShaderProgram::Substitute(GSSource, "//VTK::TCoord::Dec",
-        "in float tcoordVCVSOutput[];\n"
-        "out float tcoordVCGSOutput;");
-      vtkShaderProgram::Substitute(
-        GSSource, "//VTK::TCoord::Impl", "tcoordVCGSOutput = tcoordVCVSOutput[i];");
-      vtkShaderProgram::Substitute(
-        FSSource, "//VTK::TCoord::Dec", "in float tcoordVCVSOutput; uniform sampler2D texture1;");
-      vtkShaderProgram::Substitute(FSSource, "//VTK::TCoord::Impl",
-        "gl_FragData[0] = gl_FragData[0]*texture2D(texture1, vec2(tcoordVCVSOutput,0));");
-    }
-    else
-    {
-      vtkShaderProgram::Substitute(
-        VSSource, "//VTK::TCoord::Dec", "in vec2 tcoordMC; out vec2 tcoordVCVSOutput;");
-      vtkShaderProgram::Substitute(VSSource, "//VTK::TCoord::Impl", "tcoordVCVSOutput = tcoordMC;");
-      vtkShaderProgram::Substitute(GSSource, "//VTK::TCoord::Dec",
-        "in vec2 tcoordVCVSOutput[];\n"
-        "out vec2 tcoordVCGSOutput;");
-      vtkShaderProgram::Substitute(
-        GSSource, "//VTK::TCoord::Impl", "tcoordVCGSOutput = tcoordVCVSOutput[i];");
-      vtkShaderProgram::Substitute(
-        FSSource, "//VTK::TCoord::Dec", "in vec2 tcoordVCVSOutput; uniform sampler2D texture1;");
-      vtkShaderProgram::Substitute(FSSource, "//VTK::TCoord::Impl",
-        "gl_FragData[0] = gl_FragData[0]*texture2D(texture1, tcoordVCVSOutput.st);");
-    }
-  }
-
-  if (this->HaveCellScalars)
-  {
-    vtkShaderProgram::Substitute(
-      GSSource, "//VTK::PrimID::Impl", "gl_PrimitiveID = gl_PrimitiveIDIn;");
-  }
-
+//------------------------------------------------------------------------------
+void vtkOpenGLPolyDataMapper2D::ReplaceShaderValues(
+  std::map<vtkShader::Type, vtkShader*> shaders, vtkViewport* viewport, vtkActor2D* actor)
+{
   vtkRenderer* ren = vtkRenderer::SafeDownCast(viewport);
-  if (ren && ren->GetSelector())
-  {
-    this->ReplaceShaderPicking(FSSource, ren, actor);
-  }
+
+  this->ReplaceShaderColor(shaders, ren, actor);
+  this->ReplaceShaderTCoord(shaders, ren, actor);
+  this->ReplaceShaderPrimID(shaders, ren, actor);
+  this->ReplaceShaderPicking(shaders, ren, actor);
+
+  // cout << "VS: " << shaders[vtkShader::Vertex]->GetSource() << endl;
+  // cout << "GS: " << shaders[vtkShader::Geometry]->GetSource() << endl;
+  // cout << "FS: " << shaders[vtkShader::Fragment]->GetSource() << endl;
 }
 
 //------------------------------------------------------------------------------
@@ -253,31 +247,67 @@ void vtkOpenGLPolyDataMapper2D::UpdateShaders(
 
   if (this->GetNeedToRebuildShaders(cellBO, viewport, actor))
   {
-    std::string VSSource;
-    std::string FSSource;
-    std::string GSSource;
-    this->BuildShaders(VSSource, FSSource, GSSource, viewport, actor);
-    vtkShaderProgram* newShader = renWin->GetShaderCache()->ReadyShaderProgram(
-      VSSource.c_str(), FSSource.c_str(), GSSource.c_str());
-    cellBO.ShaderSourceTime.Modified();
-    // if the shader changed reinitialize the VAO
-    if (newShader != cellBO.Program)
+    // build the shader source code
+    std::map<vtkShader::Type, vtkShader*> shaders;
+    vtkShader* vss = vtkShader::New();
+    vss->SetType(vtkShader::Vertex);
+    shaders[vtkShader::Vertex] = vss;
+    vtkShader* gss = vtkShader::New();
+    gss->SetType(vtkShader::Geometry);
+    shaders[vtkShader::Geometry] = gss;
+    vtkShader* fss = vtkShader::New();
+    fss->SetType(vtkShader::Fragment);
+    shaders[vtkShader::Fragment] = fss;
+
+    this->BuildShaders(shaders, viewport, actor);
+
+    vtkShaderProgram* newShader = renWin->GetShaderCache()->ReadyShaderProgram(shaders);
+    if (newShader)
     {
-      cellBO.Program = newShader;
-      cellBO.VAO->ShaderProgramChanged(); // reset the VAO as the shader has changed
+      vss->Delete();
+      fss->Delete();
+      gss->Delete();
+
+      // if the shader changed reinitialize the VAO
+      if (newShader != cellBO.Program || cellBO.Program->GetMTime() > cellBO.AttributeUpdateTime)
+      {
+        cellBO.Program = newShader;
+        // reset the VAO as the shader has changed
+        cellBO.VAO->ReleaseGraphicsResources();
+      }
+
+      cellBO.ShaderSourceTime.Modified();
+    }
+    else
+    {
+      vtkErrorMacro("Could not set shader program");
     }
   }
   else
   {
     renWin->GetShaderCache()->ReadyShaderProgram(cellBO.Program);
+    if (cellBO.Program->GetMTime() > cellBO.AttributeUpdateTime)
+    {
+      // reset the VAO as the shader has changed
+      cellBO.VAO->ReleaseGraphicsResources();
+    }
   }
+  vtkOpenGLCheckErrorMacro("failed after UpdateShader");
 
   if (cellBO.Program)
   {
     this->SetMapperShaderParameters(cellBO, viewport, actor);
+    vtkOpenGLCheckErrorMacro("failed after UpdateShader");
     this->SetPropertyShaderParameters(cellBO, viewport, actor);
+    vtkOpenGLCheckErrorMacro("failed after UpdateShader");
     this->SetCameraShaderParameters(cellBO, viewport, actor);
+    vtkOpenGLCheckErrorMacro("failed after UpdateShader");
+
+    // allow the program to set what it wants
+    this->InvokeEvent(vtkCommand::UpdateShaderEvent, cellBO.Program);
   }
+
+  vtkOpenGLCheckErrorMacro("failed after UpdateShader");
 }
 
 //------------------------------------------------------------------------------
@@ -349,12 +379,130 @@ void vtkOpenGLPolyDataMapper2D::SetPropertyShaderParameters(
 }
 
 //------------------------------------------------------------------------------
-void vtkOpenGLPolyDataMapper2D::ReplaceShaderPicking(
-  std::string& fssource, vtkRenderer*, vtkActor2D*)
+void vtkOpenGLPolyDataMapper2D::ReplaceShaderColor(
+  std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer*, vtkActor2D* actor)
 {
-  vtkShaderProgram::Substitute(fssource, "//VTK::Picking::Dec", "uniform vec3 mapperIndex;");
+  std::string VSSource = shaders[vtkShader::Vertex]->GetSource();
+  std::string GSSource = shaders[vtkShader::Geometry]->GetSource();
+  std::string FSSource = shaders[vtkShader::Fragment]->GetSource();
+
+  // Build our shader if necessary.
+  if (this->HaveCellScalars)
+  {
+    vtkShaderProgram::Substitute(FSSource, "//VTK::Color::Dec", "uniform samplerBuffer textureC;");
+    vtkShaderProgram::Substitute(FSSource, "//VTK::Color::Impl",
+      "gl_FragData[0] = texelFetchBuffer(textureC, gl_PrimitiveID + PrimitiveIDOffset);");
+  }
+  else
+  {
+    if (this->Colors && this->Colors->GetNumberOfComponents())
+    {
+      vtkShaderProgram::Substitute(VSSource, "//VTK::Color::Dec",
+        "in vec4 diffuseColor;\n"
+        "out vec4 fcolorVSOutput;");
+      vtkShaderProgram::Substitute(
+        VSSource, "//VTK::Color::Impl", "fcolorVSOutput = diffuseColor;");
+      vtkShaderProgram::Substitute(GSSource, "//VTK::Color::Dec",
+        "in vec4 fcolorVSOutput[];\n"
+        "out vec4 fcolorGSOutput;");
+      vtkShaderProgram::Substitute(
+        GSSource, "//VTK::Color::Impl", "fcolorGSOutput = fcolorVSOutput[i];");
+      vtkShaderProgram::Substitute(FSSource, "//VTK::Color::Dec", "in vec4 fcolorVSOutput;");
+      vtkShaderProgram::Substitute(
+        FSSource, "//VTK::Color::Impl", "gl_FragData[0] = fcolorVSOutput;");
+    }
+    else
+    {
+      vtkShaderProgram::Substitute(FSSource, "//VTK::Color::Dec", "uniform vec4 diffuseColor;");
+      vtkShaderProgram::Substitute(
+        FSSource, "//VTK::Color::Impl", "gl_FragData[0] = diffuseColor;");
+    }
+  }
+
+  shaders[vtkShader::Vertex]->SetSource(VSSource);
+  shaders[vtkShader::Geometry]->SetSource(GSSource);
+  shaders[vtkShader::Fragment]->SetSource(FSSource);
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLPolyDataMapper2D::ReplaceShaderTCoord(
+  std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer*, vtkActor2D* actor)
+{
+  std::string VSSource = shaders[vtkShader::Vertex]->GetSource();
+  std::string GSSource = shaders[vtkShader::Geometry]->GetSource();
+  std::string FSSource = shaders[vtkShader::Fragment]->GetSource();
+
+  int numTCoordComps = this->VBOs->GetNumberOfComponents("tcoordMC");
+  if (numTCoordComps == 1 || numTCoordComps == 2)
+  {
+    if (numTCoordComps == 1)
+    {
+      vtkShaderProgram::Substitute(
+        VSSource, "//VTK::TCoord::Dec", "in float tcoordMC; out float tcoordVCVSOutput;");
+      vtkShaderProgram::Substitute(VSSource, "//VTK::TCoord::Impl", "tcoordVCVSOutput = tcoordMC;");
+      vtkShaderProgram::Substitute(GSSource, "//VTK::TCoord::Dec",
+        "in float tcoordVCVSOutput[];\n"
+        "out float tcoordVCGSOutput;");
+      vtkShaderProgram::Substitute(
+        GSSource, "//VTK::TCoord::Impl", "tcoordVCGSOutput = tcoordVCVSOutput[i];");
+      vtkShaderProgram::Substitute(
+        FSSource, "//VTK::TCoord::Dec", "in float tcoordVCVSOutput; uniform sampler2D texture1;");
+      vtkShaderProgram::Substitute(FSSource, "//VTK::TCoord::Impl",
+        "gl_FragData[0] = gl_FragData[0]*texture2D(texture1, vec2(tcoordVCVSOutput,0));");
+    }
+    else
+    {
+      vtkShaderProgram::Substitute(
+        VSSource, "//VTK::TCoord::Dec", "in vec2 tcoordMC; out vec2 tcoordVCVSOutput;");
+      vtkShaderProgram::Substitute(VSSource, "//VTK::TCoord::Impl", "tcoordVCVSOutput = tcoordMC;");
+      vtkShaderProgram::Substitute(GSSource, "//VTK::TCoord::Dec",
+        "in vec2 tcoordVCVSOutput[];\n"
+        "out vec2 tcoordVCGSOutput;");
+      vtkShaderProgram::Substitute(
+        GSSource, "//VTK::TCoord::Impl", "tcoordVCGSOutput = tcoordVCVSOutput[i];");
+      vtkShaderProgram::Substitute(
+        FSSource, "//VTK::TCoord::Dec", "in vec2 tcoordVCVSOutput; uniform sampler2D texture1;");
+      vtkShaderProgram::Substitute(FSSource, "//VTK::TCoord::Impl",
+        "gl_FragData[0] = gl_FragData[0]*texture2D(texture1, tcoordVCVSOutput.st);");
+    }
+  }
+
+  shaders[vtkShader::Vertex]->SetSource(VSSource);
+  shaders[vtkShader::Geometry]->SetSource(GSSource);
+  shaders[vtkShader::Fragment]->SetSource(FSSource);
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLPolyDataMapper2D::ReplaceShaderPrimID(
+  std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer*, vtkActor2D* actor)
+{
+  std::string GSSource = shaders[vtkShader::Geometry]->GetSource();
+
+  if (this->HaveCellScalars)
+  {
+    vtkShaderProgram::Substitute(
+      GSSource, "//VTK::PrimID::Impl", "gl_PrimitiveID = gl_PrimitiveIDIn;");
+  }
+
+  shaders[vtkShader::Geometry]->SetSource(GSSource);
+}
+
+//------------------------------------------------------------------------------
+void vtkOpenGLPolyDataMapper2D::ReplaceShaderPicking(
+  std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor2D*)
+{
+  if (ren && !ren->GetSelector())
+  {
+    return;
+  }
+
+  std::string FSSource = shaders[vtkShader::Fragment]->GetSource();
+
+  vtkShaderProgram::Substitute(FSSource, "//VTK::Picking::Dec", "uniform vec3 mapperIndex;");
   vtkShaderProgram::Substitute(
-    fssource, "//VTK::Picking::Impl", "gl_FragData[0] = vec4(mapperIndex,1.0);\n");
+    FSSource, "//VTK::Picking::Impl", "gl_FragData[0] = vec4(mapperIndex,1.0);\n");
+
+  shaders[vtkShader::Fragment]->SetSource(FSSource);
 }
 
 //------------------------------------------------------------------------------
