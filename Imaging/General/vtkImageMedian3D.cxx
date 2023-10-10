@@ -33,6 +33,8 @@ vtkStandardNewMacro(vtkImageMedian3D);
 vtkImageMedian3D::vtkImageMedian3D()
 {
   this->NumberOfElements = 0;
+  this->BackgroundValue = 0;
+  this->IgnoreBackground = false;
   this->SetKernelSize(1, 1, 1);
   this->HandleBoundaries = 1;
 }
@@ -202,6 +204,8 @@ void vtkImageMedian3DExecute(vtkImageMedian3D* self, vtkImageData* inData, T* in
       inPtr0 = inPtr1;
       hoodMin0 = hoodStartMin0;
       hoodMax0 = hoodStartMax0;
+      T backgroundValue = static_cast<T>(self->GetBackgroundValue());
+      bool ignoreBackground = self->GetIgnoreBackground();
       for (outIdx0 = outExt[0]; outIdx0 <= outExt[1]; ++outIdx0)
       {
         for (outIdxC = 0; outIdxC < numComp; outIdxC++)
@@ -211,25 +215,59 @@ void vtkImageMedian3DExecute(vtkImageMedian3D* self, vtkImageData* inData, T* in
 
           // loop through neighborhood pixels
           tmpPtr2 = inPtr0 + outIdxC;
-          for (hoodIdx2 = hoodMin2; hoodIdx2 <= hoodMax2; ++hoodIdx2)
+          if (ignoreBackground)
           {
-            tmpPtr1 = tmpPtr2;
-            for (hoodIdx1 = hoodMin1; hoodIdx1 <= hoodMax1; ++hoodIdx1)
+            // The whole loop is repeated to avoid an extra "if (self->IgnoreBackground)" in a hot loop
+            for (hoodIdx2 = hoodMin2; hoodIdx2 <= hoodMax2; ++hoodIdx2)
             {
-              tmpPtr0 = tmpPtr1;
-              for (hoodIdx0 = hoodMin0; hoodIdx0 <= hoodMax0; ++hoodIdx0)
+              tmpPtr1 = tmpPtr2;
+              for (hoodIdx1 = hoodMin1; hoodIdx1 <= hoodMax1; ++hoodIdx1)
               {
-                // Add this pixel to the median
-                *workEnd++ = *tmpPtr0;
-                tmpPtr0 += inInc0;
+                tmpPtr0 = tmpPtr1;
+                for (hoodIdx0 = hoodMin0; hoodIdx0 <= hoodMax0; ++hoodIdx0)
+                {
+                  if (*tmpPtr0 != backgroundValue)
+                  {
+                    // Add this pixel to the median, but only if it is not a background voxel
+                    *workEnd++ = *tmpPtr0;
+                  }
+                  tmpPtr0 += inInc0;
+                }
+                tmpPtr1 += inInc1;
               }
-              tmpPtr1 += inInc1;
+              tmpPtr2 += inInc2;
             }
-            tmpPtr2 += inInc2;
+          }
+          else
+          {
+            for (hoodIdx2 = hoodMin2; hoodIdx2 <= hoodMax2; ++hoodIdx2)
+            {
+              tmpPtr1 = tmpPtr2;
+              for (hoodIdx1 = hoodMin1; hoodIdx1 <= hoodMax1; ++hoodIdx1)
+              {
+                tmpPtr0 = tmpPtr1;
+                for (hoodIdx0 = hoodMin0; hoodIdx0 <= hoodMax0; ++hoodIdx0)
+                {
+                  // Add this pixel to the median
+                  *workEnd++ = *tmpPtr0;
+                  tmpPtr0 += inInc0;
+                }
+                tmpPtr1 += inInc1;
+              }
+              tmpPtr2 += inInc2;
+            }
           }
 
           // Replace this pixel with the hood median
-          *outPtr++ = vtkComputeMedianOfArray(workArray, workEnd);
+          if (workEnd != workArray)
+          {
+            *outPtr++ = vtkComputeMedianOfArray(workArray, workEnd);
+          }
+          else
+          {
+            // All voxels were background
+            *outPtr++ = 0;
+          }
         }
 
         // shift neighborhood considering boundaries

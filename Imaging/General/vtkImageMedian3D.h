@@ -50,11 +50,33 @@ public:
   vtkGetMacro(NumberOfElements, int);
   ///@}
 
+  ///@{
+  /**
+   * Set/Get the background voxel value that is excluded from the median computation.
+   * \sa 
+   */
+  vtkSetMacro(BackgroundValue, double);
+  vtkGetMacro(BackgroundValue, double);
+  ///@}
+
+  ///@{
+  /**
+   * Exclude background voxels from the median computation.
+   * This is useful for dilating label volumes by half of the kernel size.
+   * \sa BackgroundValue
+   */
+  vtkSetMacro(IgnoreBackground, vtkTypeBool);
+  vtkGetMacro(IgnoreBackground, vtkTypeBool);
+  vtkBooleanMacro(IgnoreBackground, vtkTypeBool); 
+  ///@}
+
 protected:
   vtkImageMedian3D();
   ~vtkImageMedian3D() override;
 
   int NumberOfElements;
+  double BackgroundValue;
+  vtkTypeBool IgnoreBackground;
 
   void ThreadedRequestData(vtkInformation* request, vtkInformationVector** inputVector,
     vtkInformationVector* outputVector, vtkImageData*** inData, vtkImageData** outData,
