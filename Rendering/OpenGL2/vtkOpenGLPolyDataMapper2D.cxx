@@ -137,6 +137,7 @@ bool vtkOpenGLPolyDataMapper2D::GetNeedToRebuildShaders(
   if (cellBO.Program == nullptr || cellBO.ShaderSourceTime < this->GetMTime() ||
     cellBO.ShaderSourceTime < actor->GetMTime() ||
     cellBO.ShaderSourceTime < actor->GetShaderProperty()->GetMTime() ||
+    cellBO.ShaderSourceTime < actor->GetShaderProperty()->GetShaderMTime() ||
     cellBO.ShaderSourceTime < this->GetInput()->GetMTime() ||
     cellBO.ShaderSourceTime < this->PickStateChanged)
   {
