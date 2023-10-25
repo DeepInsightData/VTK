@@ -74,7 +74,7 @@ public:
   vtkIdType FlatIndex;
 
   bool UsingPoints;
-  double TriangleScale;
+  double BoundScale;
 
   // called by our Owner skips some stuff
   void GaussianRender(vtkRenderer* ren, vtkActor* act);
@@ -130,7 +130,7 @@ vtkOpenGLPointGaussianMapperHelper::vtkOpenGLPointGaussianMapperHelper()
 {
   this->Owner = nullptr;
   this->UsingPoints = false;
-  this->TriangleScale = 0.0;
+  this->BoundScale = 0.0;
   this->FlatIndex = 1;
   this->OpacityTable = nullptr;
   this->ScaleTable = nullptr;
@@ -292,7 +292,8 @@ void vtkOpenGLPointGaussianMapperHelper::SetMapperShaderParameters(
 {
   if (!this->UsingPoints)
   {
-    cellBO.Program->SetUniformf("triangleScale", this->TriangleScale);
+    cellBO.Program->SetUniformf("boundScale", this->BoundScale);
+    cellBO.Program->SetUniformf("scaleFactor", this->Owner->GetScaleFactor());
   }
   this->Superclass::SetMapperShaderParameters(cellBO, ren, actor);
 }
@@ -407,8 +408,6 @@ float vtkOpenGLPointGaussianMapperHelperGetRadius(
         (tindex - itindex) * self->ScaleTable[itindex + 1];
     }
   }
-  radius *= self->Owner->GetScaleFactor();
-  radius *= self->TriangleScale;
 
   return static_cast<float>(radius);
 }
@@ -463,7 +462,7 @@ void vtkOpenGLPointGaussianMapperHelper::BuildBufferObjects(
   }
 
   // set the triangle scale
-  this->TriangleScale = this->Owner->GetTriangleScale();
+  this->BoundScale = this->Owner->GetBoundScale();
 
   bool hasScaleArray = this->Owner->GetScaleArray() != nullptr &&
     poly->GetPointData()->HasArray(this->Owner->GetScaleArray());
