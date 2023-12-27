@@ -122,6 +122,8 @@ public:
    */
   void MapInputToAction(vtkCommand::EventIds eid, int state);
   void MapInputToAction(vtkCommand::EventIds eid, vtkEventDataAction action, int state);
+  int GetMappedAction(
+    vtkCommand::EventIds eid, vtkEventDataAction action = vtkEventDataAction::Press);
   ///@}
 
   /**
